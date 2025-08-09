@@ -1,0 +1,13 @@
+node_modules
+
+music
+
+.git
+.gitignore
+
+Dockerfile
+compose.yaml
+.dockerignore
+
+npm-debug.log*
+.env

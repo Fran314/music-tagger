@@ -1,0 +1,14 @@
+services:
+  music-tagger:
+    build: .
+    container_name: music-tagger
+    restart: unless-stopped
+    ports:
+      - '8293:8293'
+    environment:
+      - PORT=8293
+      - INPUT_DIR=/app/input
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output

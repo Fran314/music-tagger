@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Tagger</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/style.css">
+    
+    <script src="/metronome.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Music Tagger</h1>
+
+        <div class="player-container">
+            <audio id="audio-player" controls>
+                Your browser does not support the audio element.
+            </audio>
+
+            <input type="search" id="search-input" placeholder="Search tracks...">
+            
+            <div id="now-playing">Select a track to play</div>
+
+            <form id="tag-form" onsubmit="return false;">
+                <div class="tag-input-group">
+                    <label for="tag-input-title">Title</label>
+                    <input type="text" id="tag-input-title" class="tag-input" placeholder="-" disabled>
+                </div>
+                <div class="tag-input-group">
+                    <label for="tag-input-artist">Artist</label>
+                    <input type="text" id="tag-input-artist" class="tag-input" placeholder="-" disabled>
+                </div>
+                <div class="tag-input-group">
+                    <label for="tag-input-genre">Genre</label>
+                    <div class="genre-buttons-container">
+                        <button type="button" id="btn-genre-bw" class="genre-button" data-value="boogie woogie" disabled>Boogie Woogie</button>
+                        <button type="button" id="btn-genre-lh" class="genre-button" data-value="lindy hop" disabled>Lindy Hop</button>
+                    </div>
+                </div>
+                <div class="tag-input-group">
+                    <label for="tag-input-bpm">BPM</label>
+                    <input type="text" id="tag-input-bpm" class="tag-input" placeholder="-" disabled>
+                </div>
+                <div class="tag-input-group">
+                    <label for="tag-input-comment">Comment</label>
+                    <input type="text" id="tag-input-comment" class="tag-input" placeholder="-" disabled>
+                </div>
+                <button type="submit" id="save-button" disabled>Save</button>
+            </form>
+
+            <div id="metronome-container">
+                <label for="bpm-slider">Metronome</label>
+                <button id="metronome-toggle" title="Start/Stop Metronome">
+                    <span class="material-icons">play_arrow</span>
+                </button>
+                <input type="range" id="bpm-slider" min="140" max="240" value="160">
+                <span id="bpm-display">160 BPM</span>
+            </div>
+        </div>
+
+        <div class="columns-container">
+            <div class="column">
+                <h2>Input</h2>
+                <ul id="input-list">
+                    <% inputFiles.forEach(file => { %>
+                        <li class="track-item" data-path="<%= file.path %>" data-dir="input">
+                            <span class="track-item-path"><%= file.path %></span>
+                        </li>
+                    <% }) %>
+                </ul>
+            </div>
+            <div class="column">
+                <h2>Output</h2>
+                <ul id="output-list">
+                    <% outputFiles.forEach(file => { %>
+                        <li class="track-item" data-path="<%= file.path %>" data-dir="output">
+                            <span class="track-item-path"><%= file.path %></span>
+                            <button class="move-to-input-btn" title="Move back to input">
+                                <span class="material-icons">undo</span>
+                            </button>
+                        </li>
+                    <% }) %>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const audioPlayer = document.getElementById('audio-player');
+            const nowPlaying = document.getElementById('now-playing');
+            const searchInput = document.getElementById('search-input');
+            const columnsContainer = document.querySelector('.columns-container');
+            const inputList = document.getElementById('input-list');
+            const outputList = document.getElementById('output-list');
+            let currentTrackItem = null;
+
+            const tagForm = document.getElementById('tag-form');
+            const saveButton = document.getElementById('save-button');
+            const btnGenreBw = document.getElementById('btn-genre-bw');
+            const btnGenreLh = document.getElementById('btn-genre-lh');
+            const bpmTagInput = document.getElementById('tag-input-bpm');
+
+            // --- Metronome Setup ---
+            const metronomeToggle = document.getElementById('metronome-toggle');
+            const metronomeIcon = metronomeToggle.querySelector('.material-icons');
+            const bpmSlider = document.getElementById('bpm-slider');
+            const bpmDisplay = document.getElementById('bpm-display');
+            const metronome = new Metronome(160);
+
+            /**
+             * Updates all BPM-related UI elements and the metronome instance.
+             * @param {number} newBpm The new BPM value.
+             */
+            function updateBpm(newBpm) {
+                metronome.setBpm(newBpm);
+                bpmDisplay.textContent = `${newBpm} BPM`;
+                bpmSlider.value = newBpm;
+                if (!bpmTagInput.disabled) {
+                    bpmTagInput.value = newBpm;
+                }
+            }
+            
+            metronomeToggle.addEventListener('click', () => {
+                if (metronome.isPlaying) {
+                    metronome.stop();
+                    metronomeIcon.textContent = 'play_arrow';
+                } else {
+                    metronome.start();
+                    metronomeIcon.textContent = 'stop';
+                }
+            });
+
+            bpmSlider.addEventListener('input', (e) => {
+                updateBpm(e.target.value);
+            });
+            
+            bpmTagInput.addEventListener('input', (e) => {
+                const newBpm = parseInt(e.target.value, 10);
+                if (newBpm && newBpm >= 60 && newBpm <= 240) {
+                    updateBpm(newBpm);
+                }
+            });
+
+            /**
+             * Stops the metronome and updates its UI when the main audio stops.
+             */
+            function stopMetronomeOnAudioStop() {
+                if (metronome.isPlaying) {
+                    metronome.stop();
+                    metronomeIcon.textContent = 'play_arrow';
+                }
+            }
+            
+            // Listen for pause and end events on the audio player to stop the metronome
+            audioPlayer.addEventListener('pause', stopMetronomeOnAudioStop);
+            audioPlayer.addEventListener('ended', stopMetronomeOnAudioStop);
+            
+            // --- End Metronome Setup ---
+
+            const tagInputs = {
+                title: document.getElementById('tag-input-title'),
+                artist: document.getElementById('tag-input-artist'),
+                // Genre is now handled by buttons
+                bpm: document.getElementById('tag-input-bpm'),
+                comment: document.getElementById('tag-input-comment')
+            };
+
+            // Add click listeners to toggle genre buttons
+            btnGenreBw.addEventListener('click', () => btnGenreBw.classList.toggle('selected'));
+            btnGenreLh.addEventListener('click', () => btnGenreLh.classList.toggle('selected'));
+
+            function clearTagInputs(message = '-') {
+                // Handle text inputs
+                for (const key in tagInputs) {
+                    const input = tagInputs[key];
+                    input.value = '';
+                    input.placeholder = message;
+                    input.disabled = true;
+                }
+                // Handle genre buttons
+                btnGenreBw.classList.remove('selected');
+                btnGenreLh.classList.remove('selected');
+                btnGenreBw.disabled = true;
+                btnGenreLh.disabled = true;
+
+                saveButton.disabled = true;
+            }
+
+            async function fetchAndDisplayTags(trackDir, trackPath) {
+                clearTagInputs('Loading...');
+                try {
+                    const response = await fetch(`/tags/${trackDir}/${encodeURIComponent(trackPath)}`);
+                    if (!response.ok) throw new Error('Failed to fetch tags.');
+                    const tags = await response.json();
+                    
+                    // ... (populate text inputs and genre buttons)
+                    for (const key in tagInputs) {
+                        const input = tagInputs[key];
+                        input.value = tags[key] || '';
+                        input.placeholder = '-';
+                        input.disabled = false;
+                    }
+
+                    const receivedGenres = tags.genre ? tags.genre.toLowerCase() : '';
+                    btnGenreBw.classList.toggle('selected', receivedGenres.includes('boogie woogie'));
+                    btnGenreLh.classList.toggle('selected', receivedGenres.includes('lindy hop'));
+                    btnGenreBw.disabled = false;
+                    btnGenreLh.disabled = false;
+                    
+                    // Sync metronome with the loaded track's BPM
+                    const loadedBpm = parseInt(tags.bpm, 10);
+                    if (loadedBpm) {
+                        updateBpm(loadedBpm);
+                    }
+
+                    saveButton.disabled = false;
+                } catch (error) {
+                    console.error('Error fetching tags:', error);
+                    clearTagInputs('Error');
+                }
+            }
+
+            let allTrackItems = document.querySelectorAll('.track-item');
+            searchInput.addEventListener('input', () => {
+                const searchTerm = searchInput.value.toLowerCase();
+                allTrackItems.forEach(item => {
+                    const trackPath = item.dataset.path.toLowerCase();
+                    const isVisible = trackPath.includes(searchTerm);
+                    item.classList.toggle('hidden', !isVisible);
+                });
+            });
+
+            columnsContainer.addEventListener('click', async (event) => {
+                const moveToInputBtn = event.target.closest('.move-to-input-btn');
+                const trackItemElement = event.target.closest('.track-item');
+
+                if (moveToInputBtn) {
+                    event.stopPropagation();
+                    const trackItem = moveToInputBtn.closest('.track-item');
+                    const filePath = trackItem.dataset.path;
+
+                    try {
+                        const response = await fetch('/move-to-input', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filePath }),
+                        });
+                        if (!response.ok) {
+                            const errData = await response.json();
+                            throw new Error(errData.error || 'Server error');
+                        }
+
+                        trackItem.dataset.dir = 'input';
+                        moveToInputBtn.remove();
+                        inputList.prepend(trackItem);
+                        
+                        if (trackItem === currentTrackItem) {
+                            clearTagInputs();
+                            currentTrackItem.classList.remove('playing');
+                            currentTrackItem = null;
+                        }
+                    } catch (error) {
+                        console.error('Failed to move file to input:', error);
+                        alert(`Error moving file: ${error.message}`);
+                    }
+                    return;
+                }
+                
+                if (trackItemElement) {
+                    const trackPath = trackItemElement.getAttribute('data-path');
+                    const trackDir = trackItemElement.getAttribute('data-dir');
+                    
+                    if (trackPath && trackDir) {
+                        audioPlayer.src = `/play/${trackDir}/${encodeURIComponent(trackPath)}`;
+                        audioPlayer.play();
+                        nowPlaying.textContent = `Now Playing: ${trackPath}`;
+
+                        if (currentTrackItem) {
+                            currentTrackItem.classList.remove('playing');
+                        }
+                        currentTrackItem = trackItemElement;
+                        currentTrackItem.classList.add('playing');
+
+                        fetchAndDisplayTags(trackDir, trackPath);
+                    }
+                }
+            });
+
+            tagForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (!currentTrackItem || saveButton.disabled) return;
+
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+
+                const sourceDir = currentTrackItem.dataset.dir;
+                const sourcePath = currentTrackItem.dataset.path;
+
+                // Collect tags from text inputs
+                const tags = {};
+                for (const key in tagInputs) {
+                    tags[key] = tagInputs[key].value;
+                }
+
+                // Construct the genre string from the button states
+                const selectedGenres = [];
+                if (btnGenreBw.classList.contains('selected')) {
+                    selectedGenres.push('boogie woogie');
+                }
+                if (btnGenreLh.classList.contains('selected')) {
+                    selectedGenres.push('lindy hop');
+                }
+                tags.genre = selectedGenres.join(', ');
+
+                try {
+                    const response = await fetch('/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sourceDir, sourcePath, tags })
+                    });
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(errData.error || 'Server error');
+                    }
+                    const result = await response.json();
+
+                    // Stop audio playback and reset the player completely.
+                    audioPlayer.pause();
+                    audioPlayer.removeAttribute('src'); // Unload the media source without causing an error.
+                    audioPlayer.load(); // Reset the audio element to its initial state.
+
+                    // Stop the metronome and reset its UI.
+                    stopMetronomeOnAudioStop();
+                    
+                    // Remove the old track item from the DOM.
+                    currentTrackItem.remove();
+
+                    // Create and add the new track item to the output list.
+                    const newTrackItem = document.createElement('li');
+                    newTrackItem.className = 'track-item';
+                    newTrackItem.dataset.path = result.newPath;
+                    newTrackItem.dataset.dir = 'output';
+                    
+                    const pathSpan = document.createElement('span');
+                    pathSpan.className = 'track-item-path';
+                    pathSpan.textContent = result.newPath;
+                    newTrackItem.appendChild(pathSpan);
+
+                    const moveBtn = document.createElement('button');
+                    moveBtn.className = 'move-to-input-btn';
+                    moveBtn.title = 'Move back to input';
+                    moveBtn.innerHTML = '<span class="material-icons">undo</span>';
+                    newTrackItem.appendChild(moveBtn);
+                    
+                    outputList.prepend(newTrackItem);
+                    allTrackItems = document.querySelectorAll('.track-item');
+
+                    // Reset the form and selection state.
+                    clearTagInputs();
+                    currentTrackItem = null;
+                    nowPlaying.textContent = 'Saved successfully. Select a track to play.';
+                } catch (error) {
+                    console.error('Failed to save:', error);
+                    alert(`Error saving file: ${error.message}`);
+                    saveButton.disabled = false;
+                } finally {
+                    saveButton.textContent = 'Save';
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.target.tagName.toLowerCase() === 'input') {
+                    return;
+                }
+                if (event.key === '/' || (event.code === 'KeyF' && event.ctrlKey)) {
+                    event.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                    return;
+                }
+                if (event.shiftKey && (event.code === 'ArrowRight' || event.code === 'ArrowLeft')) {
+                    event.preventDefault();
+                    if (!currentTrackItem) return;
+                    const parentList = currentTrackItem.closest('ul');
+                    if (!parentList) return;
+                    const visibleTracks = Array.from(parentList.querySelectorAll('.track-item:not(.hidden)'));
+                    if (visibleTracks.length < 2) return;
+                    const currentIndex = visibleTracks.findIndex(track => track === currentTrackItem);
+                    if (currentIndex === -1) return;
+                    const nextIndex = (event.code === 'ArrowRight') ? currentIndex + 1 : currentIndex - 1;
+                    if (nextIndex >= 0 && nextIndex < visibleTracks.length) {
+                        // Find the clickable element within the track item
+                        const clickablePart = visibleTracks[nextIndex].querySelector('.track-item-path') || visibleTracks[nextIndex];
+                        clickablePart.click();
+                    }
+                    return;
+                }
+                switch (event.code) {
+                    case 'Space':
+                        event.preventDefault();
+                        if (audioPlayer.paused) audioPlayer.play();
+                        else audioPlayer.pause();
+                        break;
+                    case 'ArrowRight':
+                        event.preventDefault();
+                        if (audioPlayer.currentSrc) audioPlayer.currentTime += 5;
+                        break;
+                    case 'ArrowLeft':
+                        event.preventDefault();
+                        if (audioPlayer.currentSrc) audioPlayer.currentTime -= 5;
+                        break;
+                    case 'ArrowUp':
+                        event.preventDefault();
+                        audioPlayer.volume = Math.min(1, audioPlayer.volume + 0.05);
+                        break;
+                    case 'ArrowDown':
+                        event.preventDefault();
+                        audioPlayer.volume = Math.max(0, audioPlayer.volume - 0.05);
+                        break;
+                    case 'KeyM':
+                        event.preventDefault();
+                        audioPlayer.muted = !audioPlayer.muted;
+                        break;
+                }
+            });
+
+            audioPlayer.addEventListener('error', () => {
+                console.error('Error playing audio.');
+                nowPlaying.textContent = `Error: Could not play track.`;
+                if(currentTrackItem) {
+                    currentTrackItem.classList.remove('playing');
+                    currentTrackItem.classList.add('error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
