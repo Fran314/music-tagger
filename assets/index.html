@@ -15,7 +15,7 @@
         <div id="app" class="container" v-cloak>
             <h1>Music Tagger</h1>
 
-            <div class="player-container">
+            <div class="player-container" :class="playerContainerClass">
                 <audio
                     id="audio-player"
                     controls

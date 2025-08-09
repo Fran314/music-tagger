@@ -12,6 +12,7 @@ const app = createApp({
         const isLoading = ref(false)
         const isSaving = ref(false)
         const trackErrors = ref([])
+        const playerContainerClass = ref('')
 
         const tags = reactive({
             title: '',
@@ -24,7 +25,7 @@ const app = createApp({
         // BPM Tapper state
         const tapTimestamps = ref([])
         const TAP_RESET_THRESHOLD_MS = 2000
-        const MAX_TAPS_TO_AVERAGE = 8
+        const MAX_TAPS_TO_AVERAGE = 128
 
         // Template Refs
         const audioPlayer = ref(null)
@@ -250,17 +251,12 @@ const app = createApp({
                 tapTimestamps.value.shift()
             }
             if (tapTimestamps.value.length > 1) {
-                const deltas = []
-                for (let i = 1; i < tapTimestamps.value.length; i++) {
-                    deltas.push(
-                        tapTimestamps.value[i] - tapTimestamps.value[i - 1],
-                    )
-                }
-                const averageDelta =
-                    deltas.reduce((sum, delta) => sum + delta, 0) /
-                    deltas.length
-                if (averageDelta > 0) {
-                    tags.bpm = Math.round(60000 / averageDelta)
+                const len = tapTimestamps.value.length
+                const calculatedBpm =
+                    (tapTimestamps.value[len - 1] - tapTimestamps.value[0]) /
+                    (len - 1)
+                if (calculatedBpm > 0) {
+                    tags.bpm = Math.round(60000 / calculatedBpm)
                 }
             }
         }
@@ -273,9 +269,17 @@ const app = createApp({
             }
         }
 
-        const handleKeydown = event => {
-            if (event.target.tagName.toLowerCase() === 'input') return
+        const triggerNoTrackFeedback = () => {
+            playerContainerClass.value = 'no-track-feedback'
+            setTimeout(() => {
+                playerContainerClass.value = ''
+            }, 600) // Must match the animation duration in CSS
+        }
 
+        const handleKeydown = event => {
+            if (event.target.tagName.toLowerCase() === 'input') {
+                return
+            }
             if (event.key === '/' || (event.code === 'KeyF' && event.ctrlKey)) {
                 event.preventDefault()
                 searchInput.value.focus()
@@ -283,8 +287,48 @@ const app = createApp({
                 return
             }
 
+            // Handle next/previous track navigation
+            if (
+                event.shiftKey &&
+                (event.code === 'ArrowRight' || event.code === 'ArrowLeft')
+            ) {
+                event.preventDefault()
+                if (!currentTrack.value) {
+                    triggerNoTrackFeedback()
+                    return
+                }
+
+                const visibleTracks =
+                    currentTrackDir.value === 'input'
+                        ? filteredInputFiles.value
+                        : filteredOutputFiles.value
+                const currentIndex = visibleTracks.findIndex(
+                    track => track.path === currentTrack.value.path,
+                )
+                if (currentIndex === -1) return
+
+                const nextIndex =
+                    event.code === 'ArrowRight'
+                        ? currentIndex + 1
+                        : currentIndex - 1
+                if (nextIndex >= 0 && nextIndex < visibleTracks.length) {
+                    selectTrack(visibleTracks[nextIndex], currentTrackDir.value)
+                }
+                return
+            }
+
             const player = audioPlayer.value
             if (!player) return
+
+            // For all other media keys, require a loaded track.
+            if (!currentTrack.value || !player.currentSrc) {
+                // Only trigger the visual shake for explicit play/seek attempts.
+                if (['Space', 'ArrowRight', 'ArrowLeft'].includes(event.code)) {
+                    triggerNoTrackFeedback()
+                }
+                // Prevent action regardless.
+                return
+            }
 
             switch (event.code) {
                 case 'Space':
@@ -293,51 +337,12 @@ const app = createApp({
                     else player.pause()
                     break
                 case 'ArrowRight':
-                    if (event.shiftKey) {
-                        event.preventDefault()
-                        // Logic for next track
-                        const visibleTracks =
-                            currentTrackDir.value === 'input'
-                                ? filteredInputFiles.value
-                                : filteredOutputFiles.value
-                        const currentIndex = visibleTracks.findIndex(
-                            track => track.path === currentTrack.value.path,
-                        )
-                        if (
-                            currentIndex > -1 &&
-                            currentIndex < visibleTracks.length - 1
-                        ) {
-                            selectTrack(
-                                visibleTracks[currentIndex + 1],
-                                currentTrackDir.value,
-                            )
-                        }
-                    } else if (player.currentSrc) {
-                        event.preventDefault()
-                        player.currentTime += 5
-                    }
+                    event.preventDefault()
+                    player.currentTime += 5
                     break
                 case 'ArrowLeft':
-                    if (event.shiftKey) {
-                        event.preventDefault()
-                        // Logic for previous track
-                        const visibleTracks =
-                            currentTrackDir.value === 'input'
-                                ? filteredInputFiles.value
-                                : filteredOutputFiles.value
-                        const currentIndex = visibleTracks.findIndex(
-                            track => track.path === currentTrack.value.path,
-                        )
-                        if (currentIndex > 0) {
-                            selectTrack(
-                                visibleTracks[currentIndex - 1],
-                                currentTrackDir.value,
-                            )
-                        }
-                    } else if (player.currentSrc) {
-                        event.preventDefault()
-                        player.currentTime -= 5
-                    }
+                    event.preventDefault()
+                    player.currentTime -= 5
                     break
                 case 'ArrowUp':
                     event.preventDefault()
@@ -371,6 +376,7 @@ const app = createApp({
             isSaving,
             tags,
             trackErrors,
+            playerContainerClass,
             audioPlayer,
             searchInput,
             isFormDisabled,
