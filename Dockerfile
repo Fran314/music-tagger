@@ -1,3 +1,8 @@
+# Define build arguments for user and group IDs with default values.
+# These can be overridden during the build process.
+ARG UID=1000
+ARG GID=1000
+
 # Stage 1: Build the application using a lean Node.js image
 FROM node:20-alpine AS builder
 
@@ -22,20 +27,19 @@ FROM gcr.io/distroless/nodejs20-debian12
 # Set the working directory in the final image
 WORKDIR /app
 
-# Copy application files with correct ownership from the builder stage.
-# Using --chown=nonroot:nonroot ensures the 'nonroot' user can access these files,
-# which is a critical security measure. The 'nonroot' user is provided by the base image.
-COPY --from=builder --chown=nonroot:nonroot /app/node_modules ./node_modules
-COPY --from=builder --chown=nonroot:nonroot /app/package.json ./package.json
-COPY --from=builder --chown=nonroot:nonroot /app/index.js ./index.js
-COPY --from=builder --chown=nonroot:nonroot /app/assets ./assets
+# Copy application files from the builder stage with ownership set to the specified UID/GID.
+# This ensures the final user process has the correct permissions for these files.
+COPY --from=builder --chown=$UID:$GID /app/node_modules ./node_modules
+COPY --from=builder --chown=$UID:$GID /app/package.json ./package.json
+COPY --from=builder --chown=$UID:$GID /app/index.js ./index.js
+COPY --from=builder --chown=$UID:$GID /app/assets ./assets
 
-# Switch to the non-root user for runtime.
-# This is a critical security best practice to avoid running as root.
-USER nonroot
+# Switch the runtime user to the specified numeric UID.
+# There is no corresponding username in /etc/passwd, but the process will run
+# with the correct user ID, matching the file permissions.
+USER $UID
 
 # Expose the port the application listens on.
-# This port must be greater than 1024 for a non-root user to bind to it.
 EXPOSE 8293
 
 # Define the command to run the application.
