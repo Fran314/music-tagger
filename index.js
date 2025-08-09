@@ -223,7 +223,8 @@ app.post('/move-to-input', async (req, res) => {
     }
 
     try {
-        await fs.rename(sourcePath, destPath)
+        await fs.cp(sourcePath, destPath)
+        await fs.unlink(sourcePath)
         res.json({ message: 'File moved back to input successfully.' })
     } catch (error) {
         console.error(`Failed to move file ${filePath} to input:`, error)
