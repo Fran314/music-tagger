@@ -201,51 +201,29 @@ h1 {
     cursor: not-allowed;
 }
 
-#metronome-container {
+#bpm-tap-container {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    width: 100%;
-    order: 5; /* Place it at the end of the flex container */
-    padding-top: 0.5rem;
-    margin-top: 0.5rem;
-    border-top: 1px solid #333;
+    gap: 0.75rem;
 }
 
-#metronome-container label {
-    font-size: 0.9rem;
-    color: #b3b3b3;
-    flex-shrink: 0;
-}
-
-#metronome-toggle {
+#bpm-tap-button {
     background-color: #555;
+    border: 1px solid #777;
     color: #fff;
-    border: none;
-    border-radius: 50%; /* Make it circular */
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: 4px;
+    padding: 0.25rem 0.75rem;
     cursor: pointer;
+    font-size: 0.9rem;
     transition: background-color 0.2s;
 }
 
-#metronome-toggle:hover {
+#bpm-tap-button:hover:not(:disabled) {
     background-color: #666;
 }
 
-#bpm-slider {
-    flex-grow: 1;
-    margin: 0;
-}
-
-#bpm-display {
-    font-variant-numeric: tabular-nums;
-    width: 80px; /* Fixed width to prevent layout shift */
-    text-align: right;
-    color: #e0e0e0;
+#bpm-tap-button:active:not(:disabled) {
+    background-color: #777;
 }
 
 .columns-container {

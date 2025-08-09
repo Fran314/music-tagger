@@ -1,6 +1,10 @@
 services:
   music-tagger:
-    build: .
+    build:
+      context: .
+      args:
+        - UID=1000
+        - GID=1000
     container_name: music-tagger
     restart: unless-stopped
     ports:

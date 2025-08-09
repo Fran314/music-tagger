@@ -8,7 +8,6 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/style.css">
     
-    <script src="/metronome.js"></script>
 </head>
 <body>
     <div class="container">
@@ -41,7 +40,10 @@
                 </div>
                 <div class="tag-input-group">
                     <label for="tag-input-bpm">BPM</label>
-                    <input type="text" id="tag-input-bpm" class="tag-input" placeholder="-" disabled>
+                    <div id="bpm-tap-container">
+                        <input type="text" id="tag-input-bpm" class="tag-input" placeholder="-" disabled>
+                        <button type="button" id="bpm-tap-button" disabled>Tap</button>
+                    </div>
                 </div>
                 <div class="tag-input-group">
                     <label for="tag-input-comment">Comment</label>
@@ -50,14 +52,6 @@
                 <button type="submit" id="save-button" disabled>Save</button>
             </form>
 
-            <div id="metronome-container">
-                <label for="bpm-slider">Metronome</label>
-                <button id="metronome-toggle" title="Start/Stop Metronome">
-                    <span class="material-icons">play_arrow</span>
-                </button>
-                <input type="range" id="bpm-slider" min="90" max="240" value="160">
-                <span id="bpm-display">160 BPM</span>
-            </div>
         </div>
 
         <div class="columns-container">
@@ -101,69 +95,66 @@
             const saveButton = document.getElementById('save-button');
             const btnGenreBw = document.getElementById('btn-genre-bw');
             const btnGenreLh = document.getElementById('btn-genre-lh');
+            
+            // --- BPM Tapper Setup ---
             const bpmTagInput = document.getElementById('tag-input-bpm');
-
-            // --- Metronome Setup ---
-            const metronomeToggle = document.getElementById('metronome-toggle');
-            const metronomeIcon = metronomeToggle.querySelector('.material-icons');
-            const bpmSlider = document.getElementById('bpm-slider');
-            const bpmDisplay = document.getElementById('bpm-display');
-            const metronome = new Metronome(160);
+            const bpmTapButton = document.getElementById('bpm-tap-button');
+            
+            let tapTimestamps = [];
+            const TAP_RESET_THRESHOLD_MS = 2000; // Reset after 2 seconds of inactivity
+            const MAX_TAPS_TO_AVERAGE = 8;
 
             /**
-             * Updates all BPM-related UI elements and the metronome instance.
+             * Updates the BPM value in the input field.
              * @param {number} newBpm The new BPM value.
              */
             function updateBpm(newBpm) {
-                metronome.setBpm(newBpm);
-                bpmDisplay.textContent = `${newBpm} BPM`;
-                bpmSlider.value = newBpm;
+                // Round the BPM for a cleaner display and value
+                const roundedBpm = Math.round(newBpm);
                 if (!bpmTagInput.disabled) {
-                    bpmTagInput.value = newBpm;
+                    bpmTagInput.value = roundedBpm;
                 }
             }
-            
-            metronomeToggle.addEventListener('click', () => {
-                if (metronome.isPlaying) {
-                    metronome.stop();
-                    metronomeIcon.textContent = 'play_arrow';
-                } else {
-                    metronome.start();
-                    metronomeIcon.textContent = 'stop';
-                }
-            });
 
-            bpmSlider.addEventListener('input', (e) => {
-                updateBpm(e.target.value);
+            bpmTapButton.addEventListener('click', () => {
+                const now = Date.now();
+
+                // If the last tap was too long ago, reset the calculation.
+                if (tapTimestamps.length > 0 && (now - tapTimestamps[tapTimestamps.length - 1]) > TAP_RESET_THRESHOLD_MS) {
+                    tapTimestamps = [];
+                }
+
+                tapTimestamps.push(now);
+
+                // Keep the array from getting too long, averaging over the last few taps.
+                if (tapTimestamps.length > MAX_TAPS_TO_AVERAGE) {
+                    tapTimestamps.shift();
+                }
+                
+                // We need at least two taps to calculate a delta.
+                if (tapTimestamps.length > 1) {
+                    const deltas = [];
+                    for (let i = 1; i < tapTimestamps.length; i++) {
+                        deltas.push(tapTimestamps[i] - tapTimestamps[i-1]);
+                    }
+                    
+                    // Calculate the average time between taps in milliseconds.
+                    const averageDelta = deltas.reduce((sum, delta) => sum + delta, 0) / deltas.length;
+
+                    if (averageDelta > 0) {
+                        const calculatedBpm = 60000 / averageDelta;
+                        updateBpm(calculatedBpm);
+                    }
+                }
             });
             
             bpmTagInput.addEventListener('input', (e) => {
-                const newBpm = parseInt(e.target.value, 10);
-                if (newBpm && newBpm >= 60 && newBpm <= 240) {
-                    updateBpm(newBpm);
-                }
             });
-
-            /**
-             * Stops the metronome and updates its UI when the main audio stops.
-             */
-            function stopMetronomeOnAudioStop() {
-                if (metronome.isPlaying) {
-                    metronome.stop();
-                    metronomeIcon.textContent = 'play_arrow';
-                }
-            }
-            
-            // Listen for pause and end events on the audio player to stop the metronome
-            audioPlayer.addEventListener('pause', stopMetronomeOnAudioStop);
-            audioPlayer.addEventListener('ended', stopMetronomeOnAudioStop);
-            
-            // --- End Metronome Setup ---
+            // --- End BPM Tapper Setup ---
 
             const tagInputs = {
                 title: document.getElementById('tag-input-title'),
                 artist: document.getElementById('tag-input-artist'),
-                // Genre is now handled by buttons
                 bpm: document.getElementById('tag-input-bpm'),
                 comment: document.getElementById('tag-input-comment')
             };
@@ -185,6 +176,10 @@
                 btnGenreLh.classList.remove('selected');
                 btnGenreBw.disabled = true;
                 btnGenreLh.disabled = true;
+                
+                // Reset BPM tapper
+                bpmTapButton.disabled = true;
+                tapTimestamps = [];
 
                 saveButton.disabled = true;
             }
@@ -210,11 +205,7 @@
                     btnGenreBw.disabled = false;
                     btnGenreLh.disabled = false;
                     
-                    // Sync metronome with the loaded track's BPM
-                    const loadedBpm = parseInt(tags.bpm, 10);
-                    if (loadedBpm) {
-                        updateBpm(loadedBpm);
-                    }
+                    bpmTapButton.disabled = false;
 
                     saveButton.disabled = false;
                 } catch (error) {
@@ -331,9 +322,6 @@
                     audioPlayer.pause();
                     audioPlayer.removeAttribute('src'); // Unload the media source without causing an error.
                     audioPlayer.load(); // Reset the audio element to its initial state.
-
-                    // Stop the metronome and reset its UI.
-                    stopMetronomeOnAudioStop();
                     
                     // Remove the old track item from the DOM.
                     currentTrackItem.remove();
