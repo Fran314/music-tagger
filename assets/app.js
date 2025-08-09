@@ -1,0 +1,391 @@
+const { createApp, ref, reactive, computed, onMounted } = Vue
+
+const app = createApp({
+    setup() {
+        // State
+        const inputFiles = ref([])
+        const outputFiles = ref([])
+        const searchTerm = ref('')
+        const currentTrack = ref(null)
+        const currentTrackDir = ref(null)
+        const nowPlayingText = ref('Select a track to play')
+        const isLoading = ref(false)
+        const isSaving = ref(false)
+        const trackErrors = ref([])
+
+        const tags = reactive({
+            title: '',
+            artist: '',
+            bpm: '',
+            comment: '',
+            genres: [],
+        })
+
+        // BPM Tapper state
+        const tapTimestamps = ref([])
+        const TAP_RESET_THRESHOLD_MS = 2000
+        const MAX_TAPS_TO_AVERAGE = 8
+
+        // Template Refs
+        const audioPlayer = ref(null)
+        const searchInput = ref(null)
+
+        // Computed Properties
+        const isFormDisabled = computed(
+            () => !currentTrack.value || isLoading.value,
+        )
+        const isSaveDisabled = computed(
+            () => !currentTrack.value || isLoading.value || isSaving.value,
+        )
+        const formPlaceholder = computed(() => {
+            if (isLoading.value) return 'Loading...'
+            if (!currentTrack.value) return '-'
+            return ''
+        })
+
+        const filterFiles = files => {
+            if (!searchTerm.value) {
+                return files
+            }
+            const lowerCaseSearch = searchTerm.value.toLowerCase()
+            return files.filter(file =>
+                file.path.toLowerCase().includes(lowerCaseSearch),
+            )
+        }
+
+        const filteredInputFiles = computed(() => filterFiles(inputFiles.value))
+        const filteredOutputFiles = computed(() =>
+            filterFiles(outputFiles.value),
+        )
+
+        // Methods
+        const fetchFiles = async () => {
+            try {
+                const response = await fetch('/api/files')
+                if (!response.ok) throw new Error('Failed to fetch file lists.')
+                const data = await response.json()
+                inputFiles.value = data.inputFiles || []
+                outputFiles.value = data.outputFiles || []
+            } catch (error) {
+                console.error('Error fetching files:', error)
+                nowPlayingText.value = 'Error loading files.'
+            }
+        }
+
+        const clearTagInputs = () => {
+            tags.title = ''
+            tags.artist = ''
+            tags.bpm = ''
+            tags.comment = ''
+            tags.genres = []
+            tapTimestamps.value = []
+        }
+
+        const fetchTags = async () => {
+            if (!currentTrack.value) return
+            isLoading.value = true
+            clearTagInputs()
+            try {
+                const response = await fetch(
+                    `/api/tags/${currentTrackDir.value}/${encodeURIComponent(currentTrack.value.path)}`,
+                )
+                if (!response.ok) throw new Error('Failed to fetch tags.')
+                const loadedTags = await response.json()
+
+                tags.title = loadedTags.title || ''
+                tags.artist = loadedTags.artist || ''
+                tags.bpm = loadedTags.bpm || ''
+                tags.comment = loadedTags.comment || ''
+                tags.genres = loadedTags.genre
+                    ? loadedTags.genre
+                          .toLowerCase()
+                          .split(',')
+                          .map(g => g.trim())
+                    : []
+            } catch (error) {
+                console.error('Error fetching tags:', error)
+                nowPlayingText.value = `Error loading tags for ${currentTrack.value.path}`
+                clearTagInputs()
+            } finally {
+                isLoading.value = false
+            }
+        }
+
+        const selectTrack = (track, dir) => {
+            if (currentTrack.value?.path === track.path) return
+
+            currentTrack.value = track
+            currentTrackDir.value = dir
+            nowPlayingText.value = `Now Playing: ${track.path}`
+            trackErrors.value = trackErrors.value.filter(p => p !== track.path)
+
+            if (audioPlayer.value) {
+                audioPlayer.value.src = `/api/play/${dir}/${encodeURIComponent(track.path)}`
+                audioPlayer.value.play()
+            }
+
+            fetchTags()
+        }
+
+        const saveTags = async () => {
+            if (isSaveDisabled.value) return
+            isSaving.value = true
+
+            const payload = {
+                sourceDir: currentTrackDir.value,
+                sourcePath: currentTrack.value.path,
+                tags: {
+                    title: tags.title,
+                    artist: tags.artist,
+                    bpm: tags.bpm,
+                    comment: tags.comment,
+                    genre: tags.genres.join(', '),
+                },
+            }
+
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                })
+                if (!response.ok) {
+                    const errData = await response.json()
+                    throw new Error(errData.error || 'Server error')
+                }
+                const result = await response.json()
+
+                // Remove from the source list
+                if (currentTrackDir.value === 'input') {
+                    inputFiles.value = inputFiles.value.filter(
+                        f => f.path !== currentTrack.value.path,
+                    )
+                } else {
+                    outputFiles.value = outputFiles.value.filter(
+                        f => f.path !== currentTrack.value.path,
+                    )
+                }
+
+                // Add to the output list and sort
+                outputFiles.value.push(result.newFile)
+                outputFiles.value.sort(
+                    (a, b) => new Date(b.mtime) - new Date(a.mtime),
+                )
+
+                // Reset state
+                nowPlayingText.value =
+                    'Saved successfully. Select a track to play.'
+                currentTrack.value = null
+                currentTrackDir.value = null
+                clearTagInputs()
+                if (audioPlayer.value) {
+                    audioPlayer.value.pause()
+                    audioPlayer.value.removeAttribute('src')
+                    audioPlayer.value.load()
+                }
+            } catch (error) {
+                console.error('Failed to save:', error)
+                alert(`Error saving file: ${error.message}`)
+            } finally {
+                isSaving.value = false
+            }
+        }
+
+        const moveToInput = async file => {
+            try {
+                const response = await fetch('/api/move-to-input', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file }),
+                })
+                if (!response.ok) {
+                    const errData = await response.json()
+                    throw new Error(errData.error || 'Server error')
+                }
+                const result = await response.json()
+
+                // Remove from output list
+                outputFiles.value = outputFiles.value.filter(
+                    f => f.path !== file.path,
+                )
+                // Add to input list and sort
+                inputFiles.value.push(result.newFile)
+                inputFiles.value.sort(
+                    (a, b) => new Date(b.mtime) - new Date(a.mtime),
+                )
+
+                // If the moved track was the current one, reset the form.
+                if (currentTrack.value?.path === file.path) {
+                    currentTrack.value = null
+                    currentTrackDir.value = null
+                    clearTagInputs()
+                }
+            } catch (error) {
+                console.error('Failed to move file to input:', error)
+                alert(`Error moving file: ${error.message}`)
+            }
+        }
+
+        const toggleGenre = genre => {
+            if (isFormDisabled.value) return
+            const index = tags.genres.indexOf(genre)
+            if (index > -1) {
+                tags.genres.splice(index, 1)
+            } else {
+                tags.genres.push(genre)
+            }
+        }
+
+        const handleBpmTap = () => {
+            const now = Date.now()
+            if (
+                tapTimestamps.value.length > 0 &&
+                now - tapTimestamps.value[tapTimestamps.value.length - 1] >
+                    TAP_RESET_THRESHOLD_MS
+            ) {
+                tapTimestamps.value = []
+            }
+            tapTimestamps.value.push(now)
+            if (tapTimestamps.value.length > MAX_TAPS_TO_AVERAGE) {
+                tapTimestamps.value.shift()
+            }
+            if (tapTimestamps.value.length > 1) {
+                const deltas = []
+                for (let i = 1; i < tapTimestamps.value.length; i++) {
+                    deltas.push(
+                        tapTimestamps.value[i] - tapTimestamps.value[i - 1],
+                    )
+                }
+                const averageDelta =
+                    deltas.reduce((sum, delta) => sum + delta, 0) /
+                    deltas.length
+                if (averageDelta > 0) {
+                    tags.bpm = Math.round(60000 / averageDelta)
+                }
+            }
+        }
+
+        const handleAudioError = () => {
+            console.error('Error playing audio.')
+            if (currentTrack.value) {
+                nowPlayingText.value = `Error: Could not play ${currentTrack.value.path}`
+                trackErrors.value.push(currentTrack.value.path)
+            }
+        }
+
+        const handleKeydown = event => {
+            if (event.target.tagName.toLowerCase() === 'input') return
+
+            if (event.key === '/' || (event.code === 'KeyF' && event.ctrlKey)) {
+                event.preventDefault()
+                searchInput.value.focus()
+                searchInput.value.select()
+                return
+            }
+
+            const player = audioPlayer.value
+            if (!player) return
+
+            switch (event.code) {
+                case 'Space':
+                    event.preventDefault()
+                    if (player.paused) player.play()
+                    else player.pause()
+                    break
+                case 'ArrowRight':
+                    if (event.shiftKey) {
+                        event.preventDefault()
+                        // Logic for next track
+                        const visibleTracks =
+                            currentTrackDir.value === 'input'
+                                ? filteredInputFiles.value
+                                : filteredOutputFiles.value
+                        const currentIndex = visibleTracks.findIndex(
+                            track => track.path === currentTrack.value.path,
+                        )
+                        if (
+                            currentIndex > -1 &&
+                            currentIndex < visibleTracks.length - 1
+                        ) {
+                            selectTrack(
+                                visibleTracks[currentIndex + 1],
+                                currentTrackDir.value,
+                            )
+                        }
+                    } else if (player.currentSrc) {
+                        event.preventDefault()
+                        player.currentTime += 5
+                    }
+                    break
+                case 'ArrowLeft':
+                    if (event.shiftKey) {
+                        event.preventDefault()
+                        // Logic for previous track
+                        const visibleTracks =
+                            currentTrackDir.value === 'input'
+                                ? filteredInputFiles.value
+                                : filteredOutputFiles.value
+                        const currentIndex = visibleTracks.findIndex(
+                            track => track.path === currentTrack.value.path,
+                        )
+                        if (currentIndex > 0) {
+                            selectTrack(
+                                visibleTracks[currentIndex - 1],
+                                currentTrackDir.value,
+                            )
+                        }
+                    } else if (player.currentSrc) {
+                        event.preventDefault()
+                        player.currentTime -= 5
+                    }
+                    break
+                case 'ArrowUp':
+                    event.preventDefault()
+                    player.volume = Math.min(1, player.volume + 0.05)
+                    break
+                case 'ArrowDown':
+                    event.preventDefault()
+                    player.volume = Math.max(0, player.volume - 0.05)
+                    break
+                case 'KeyM':
+                    event.preventDefault()
+                    player.muted = !player.muted
+                    break
+            }
+        }
+
+        // Lifecycle Hooks
+        onMounted(() => {
+            fetchFiles()
+            window.addEventListener('keydown', handleKeydown)
+        })
+
+        // Return everything needed in the template
+        return {
+            inputFiles,
+            outputFiles,
+            searchTerm,
+            currentTrack,
+            nowPlayingText,
+            isLoading,
+            isSaving,
+            tags,
+            trackErrors,
+            audioPlayer,
+            searchInput,
+            isFormDisabled,
+            isSaveDisabled,
+            formPlaceholder,
+            filteredInputFiles,
+            filteredOutputFiles,
+            selectTrack,
+            saveTags,
+            moveToInput,
+            toggleGenre,
+            handleBpmTap,
+            handleAudioError,
+        }
+    },
+})
+
+app.mount('#app')

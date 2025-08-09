@@ -19,9 +19,11 @@ const OUTPUT_DIR = path.resolve(__dirname, OUTPUT_DIR_PATH)
 const ALLOWED_GENRES = new Set(['boogie woogie', 'lindy hop'])
 
 const app = express()
-app.set('view engine', 'ejs')
+
 // Middleware to parse JSON bodies from POST requests
 app.use(express.json())
+// Serve static files from the 'assets' directory
+app.use(express.static(path.join(__dirname, 'assets')))
 
 /**
  * Recursively finds all music files in a directory.
@@ -64,25 +66,16 @@ if (!existsSync(OUTPUT_DIR)) {
     process.exit(1)
 }
 
-app.get('/', (req, res) => {
+// API endpoint to get the list of music files
+app.get('/api/files', (req, res) => {
     const inputFiles = findMusicFiles(INPUT_DIR)
     const outputFiles = findMusicFiles(OUTPUT_DIR)
     inputFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
     outputFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
-    res.render(path.join(__dirname, 'assets', 'index.ejs'), {
+    res.json({
         inputFiles,
         outputFiles,
     })
-})
-
-app.get('/style.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'assets', 'style.css'))
-})
-app.get('/icon.svg', (req, res) => {
-    res.sendFile(path.join(__dirname, 'assets', 'icon.svg'))
-})
-app.get('/metronome.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'assets', 'metronome.js'))
 })
 
 /**
@@ -141,25 +134,19 @@ async function getFileMetadata(filePathParam, baseDir) {
     }
 }
 
-app.get('/tags/input/*filePath', async (req, res) => {
+app.get('/api/tags/:dir/*filePath', async (req, res) => {
     const filePathParam = req.params.filePath[0]
-    const tags = await getFileMetadata(filePathParam, INPUT_DIR)
+    const dir = req.params.dir
+    const baseDir = dir === 'input' ? INPUT_DIR : OUTPUT_DIR
+
+    const tags = await getFileMetadata(filePathParam, baseDir)
     if (!tags) {
         return res.status(500).json({ error: 'Failed to read metadata.' })
     }
     res.json(tags)
 })
 
-app.get('/tags/output/*filePath', async (req, res) => {
-    const filePathParam = req.params.filePath[0]
-    const tags = await getFileMetadata(filePathParam, OUTPUT_DIR)
-    if (!tags) {
-        return res.status(500).json({ error: 'Failed to read metadata.' })
-    }
-    res.json(tags)
-})
-
-app.post('/save', async (req, res) => {
+app.post('/api/save', async (req, res) => {
     const { sourceDir, sourcePath, tags } = req.body
 
     if (!sourceDir || !sourcePath || !tags) {
@@ -195,9 +182,13 @@ app.post('/save', async (req, res) => {
         if (sourceDir === 'input') {
             await fs.unlink(sourceFullPath)
         }
+        const newFileStats = await fs.stat(destFullPath)
         res.json({
             message: 'File saved successfully.',
-            newPath: path.basename(destFullPath),
+            newFile: {
+                path: path.basename(destFullPath),
+                mtime: newFileStats.mtime,
+            },
         })
     } catch (error) {
         console.error('Error saving file:', error)
@@ -208,15 +199,15 @@ app.post('/save', async (req, res) => {
 /**
  * POST route to move a file from the output directory back to the input directory.
  */
-app.post('/move-to-input', async (req, res) => {
-    const { filePath } = req.body
+app.post('/api/move-to-input', async (req, res) => {
+    const { file } = req.body // Expect the full file object
 
-    if (!filePath) {
+    if (!file || !file.path) {
         return res.status(400).json({ error: 'Missing file path.' })
     }
 
-    const sourcePath = path.join(OUTPUT_DIR, filePath)
-    const destPath = path.join(INPUT_DIR, path.basename(filePath))
+    const sourcePath = path.join(OUTPUT_DIR, file.path)
+    const destPath = path.join(INPUT_DIR, path.basename(file.path))
 
     if (!sourcePath.startsWith(OUTPUT_DIR)) {
         return res.status(403).json({ error: 'Forbidden: Invalid path.' })
@@ -225,9 +216,16 @@ app.post('/move-to-input', async (req, res) => {
     try {
         await fs.cp(sourcePath, destPath)
         await fs.unlink(sourcePath)
-        res.json({ message: 'File moved back to input successfully.' })
+        const newFileStats = await fs.stat(destPath)
+        res.json({
+            message: 'File moved back to input successfully.',
+            newFile: {
+                path: path.basename(destPath),
+                mtime: newFileStats.mtime,
+            },
+        })
     } catch (error) {
-        console.error(`Failed to move file ${filePath} to input:`, error)
+        console.error(`Failed to move file ${file.path} to input:`, error)
         res.status(500).json({ error: 'Failed to move file.' })
     }
 })
@@ -270,14 +268,17 @@ function streamFile(filePathParam, baseDir, req, res) {
     }
 }
 
-app.get('/play/input/*filePath', (req, res) => {
+app.get('/api/play/:dir/*filePath', (req, res) => {
     const filePathParam = req.params.filePath[0]
-    streamFile(filePathParam, INPUT_DIR, req, res)
+    const dir = req.params.dir
+    const baseDir = dir === 'input' ? INPUT_DIR : OUTPUT_DIR
+    streamFile(filePathParam, baseDir, req, res)
 })
 
-app.get('/play/output/*filePath', (req, res) => {
-    const filePathParam = req.params.filePath[0]
-    streamFile(filePathParam, OUTPUT_DIR, req, res)
+// Fallback to serve index.html for any other GET request.
+// This is essential for a single-page application where routing is handled client-side.
+app.get('/{*filePath}', (req, res) => {
+    res.sendFile(path.join(__dirname, 'assets', 'index.html'))
 })
 
 const server = app.listen(PORT, () => {

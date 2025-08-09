@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Music Tagger</title>
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body>
+        <div id="app" class="container" v-cloak>
+            <h1>Music Tagger</h1>
+
+            <div class="player-container">
+                <audio
+                    id="audio-player"
+                    controls
+                    ref="audioPlayer"
+                    @error="handleAudioError"
+                >
+                    Your browser does not support the audio element.
+                </audio>
+
+                <input
+                    type="search"
+                    id="search-input"
+                    placeholder="Search tracks..."
+                    v-model="searchTerm"
+                    ref="searchInput"
+                />
+
+                <div id="now-playing">{{ nowPlayingText }}</div>
+
+                <form id="tag-form" @submit.prevent="saveTags">
+                    <div class="tag-input-group">
+                        <label for="tag-input-title">Title</label>
+                        <input
+                            type="text"
+                            id="tag-input-title"
+                            class="tag-input"
+                            :placeholder="formPlaceholder"
+                            :disabled="isFormDisabled"
+                            v-model="tags.title"
+                        />
+                    </div>
+                    <div class="tag-input-group">
+                        <label for="tag-input-artist">Artist</label>
+                        <input
+                            type="text"
+                            id="tag-input-artist"
+                            class="tag-input"
+                            :placeholder="formPlaceholder"
+                            :disabled="isFormDisabled"
+                            v-model="tags.artist"
+                        />
+                    </div>
+                    <div class="tag-input-group">
+                        <label>Genre</label>
+                        <div class="genre-buttons-container">
+                            <button
+                                type="button"
+                                class="genre-button"
+                                data-value="boogie woogie"
+                                :disabled="isFormDisabled"
+                                :class="{ selected: tags.genres.includes('boogie woogie') }"
+                                @click="toggleGenre('boogie woogie')"
+                            >
+                                Boogie Woogie
+                            </button>
+                            <button
+                                type="button"
+                                class="genre-button"
+                                data-value="lindy hop"
+                                :disabled="isFormDisabled"
+                                :class="{ selected: tags.genres.includes('lindy hop') }"
+                                @click="toggleGenre('lindy hop')"
+                            >
+                                Lindy Hop
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tag-input-group">
+                        <label for="tag-input-bpm">BPM</label>
+                        <div id="bpm-tap-container">
+                            <input
+                                type="text"
+                                id="tag-input-bpm"
+                                class="tag-input"
+                                :placeholder="formPlaceholder"
+                                :disabled="isFormDisabled"
+                                v-model="tags.bpm"
+                            />
+                            <button
+                                type="button"
+                                id="bpm-tap-button"
+                                :disabled="isFormDisabled"
+                                @click="handleBpmTap"
+                            >
+                                Tap
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tag-input-group">
+                        <label for="tag-input-comment">Comment</label>
+                        <input
+                            type="text"
+                            id="tag-input-comment"
+                            class="tag-input"
+                            :placeholder="formPlaceholder"
+                            :disabled="isFormDisabled"
+                            v-model="tags.comment"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        id="save-button"
+                        :disabled="isSaveDisabled"
+                    >
+                        {{ isSaving ? 'Saving...' : 'Save' }}
+                    </button>
+                </form>
+            </div>
+
+            <div class="columns-container">
+                <div class="column">
+                    <h2>Input</h2>
+                    <ul id="input-list">
+                        <li
+                            v-for="file in filteredInputFiles"
+                            :key="file.path"
+                            class="track-item"
+                            :data-path="file.path"
+                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
+                            @click="selectTrack(file, 'input')"
+                        >
+                            <span class="track-item-path">{{ file.path }}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="column">
+                    <h2>Output</h2>
+                    <ul id="output-list">
+                        <li
+                            v-for="file in filteredOutputFiles"
+                            :key="file.path"
+                            class="track-item"
+                            :data-path="file.path"
+                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
+                            @click="selectTrack(file, 'output')"
+                        >
+                            <span class="track-item-path">{{ file.path }}</span>
+                            <button
+                                class="move-to-input-btn"
+                                title="Move back to input"
+                                @click.stop="moveToInput(file)"
+                            >
+                                <span class="material-icons">undo</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <script src="/app.js"></script>
+    </body>
+</html>
