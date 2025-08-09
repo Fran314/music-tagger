@@ -279,8 +279,24 @@ app.get('/play/output/*filePath', (req, res) => {
     streamFile(filePathParam, OUTPUT_DIR, req, res)
 })
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Music Tagger is running at http://localhost:${PORT}`)
     console.log(`Input directory: ${INPUT_DIR}`)
     console.log(`Output directory: ${OUTPUT_DIR}`)
 })
+
+/**
+ * Handles graceful shutdown by closing the server and exiting the process.
+ */
+function gracefulShutdown() {
+    console.log('Received shutdown signal, shutting down gracefully.')
+    server.close(() => {
+        console.log('HTTP server closed.')
+        // When server has finished handling all existing connections, exit.
+        process.exit(0)
+    })
+}
+
+// Listen for termination signals
+process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', gracefulShutdown)
