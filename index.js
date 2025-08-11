@@ -161,7 +161,7 @@ app.post('/api/save', async (req, res) => {
     }
 
     const newFilename = sanitizeFilename(
-        `${tags.artist || 'Unknown Artist'} - ${tags.title || 'Untitled'}.mp3`,
+        `${tags.artist || 'Unknown Artist'} — ${tags.title || 'Untitled'}.mp3`,
     )
     const destFullPath = path.join(OUTPUT_DIR, newFilename)
 
@@ -179,7 +179,7 @@ app.post('/api/save', async (req, res) => {
             throw new Error('Failed to write ID3 tags to buffer.')
         }
         await fs.writeFile(destFullPath, success)
-        if (sourceDir === 'input') {
+        if (sourceFullPath !== destFullPath) {
             await fs.unlink(sourceFullPath)
         }
         const newFileStats = await fs.stat(destFullPath)
@@ -227,6 +227,39 @@ app.post('/api/move-to-input', async (req, res) => {
     } catch (error) {
         console.error(`Failed to move file ${file.path} to input:`, error)
         res.status(500).json({ error: 'Failed to move file.' })
+    }
+})
+
+/**
+ * DELETE route to permanently delete a file from either the input or output directory.
+ */
+app.delete('/api/files/:dir/*filePath', async (req, res) => {
+    const { dir } = req.params
+    const filePathParam = req.params.filePath[0]
+
+    if (!filePathParam || !dir) {
+        return res
+            .status(400)
+            .json({ error: 'Missing file path or directory.' })
+    }
+
+    const baseDir = dir === 'input' ? INPUT_DIR : OUTPUT_DIR
+    const fullPath = path.join(baseDir, filePathParam)
+
+    // Security check to prevent path traversal
+    if (!fullPath.startsWith(baseDir)) {
+        return res.status(403).json({ error: 'Forbidden: Invalid path.' })
+    }
+
+    try {
+        await fs.unlink(fullPath)
+        res.status(200).json({ message: `File ${filePathParam} deleted.` })
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return res.status(404).json({ error: 'File not found.' })
+        }
+        console.error(`Failed to delete file ${filePathParam}:`, error)
+        res.status(500).json({ error: 'Failed to delete file.' })
     }
 })
 

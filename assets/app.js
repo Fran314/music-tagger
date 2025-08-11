@@ -227,6 +227,58 @@ const app = createApp({
             }
         }
 
+        const deleteFile = async (file, dir) => {
+            // Ask for confirmation before deleting
+            if (
+                !confirm(
+                    `Are you sure you want to permanently delete "${file.path}"?`,
+                )
+            ) {
+                return
+            }
+
+            try {
+                const response = await fetch(
+                    `/api/files/${dir}/${encodeURIComponent(file.path)}`,
+                    {
+                        method: 'DELETE',
+                    },
+                )
+
+                if (!response.ok) {
+                    const errData = await response.json()
+                    throw new Error(errData.error || 'Server error')
+                }
+
+                // Remove from the correct list
+                if (dir === 'input') {
+                    inputFiles.value = inputFiles.value.filter(
+                        f => f.path !== file.path,
+                    )
+                } else {
+                    outputFiles.value = outputFiles.value.filter(
+                        f => f.path !== file.path,
+                    )
+                }
+
+                // If the deleted track was the current one, reset the player and form.
+                if (currentTrack.value?.path === file.path) {
+                    nowPlayingText.value = 'Select a track to play.'
+                    currentTrack.value = null
+                    currentTrackDir.value = null
+                    clearTagInputs()
+                    if (audioPlayer.value) {
+                        audioPlayer.value.pause()
+                        audioPlayer.value.removeAttribute('src')
+                        audioPlayer.value.load()
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to delete file:', error)
+                alert(`Error deleting file: ${error.message}`)
+            }
+        }
+
         const toggleGenre = genre => {
             if (isFormDisabled.value) return
             const index = tags.genres.indexOf(genre)
@@ -387,6 +439,7 @@ const app = createApp({
             selectTrack,
             saveTags,
             moveToInput,
+            deleteFile,
             toggleGenre,
             handleBpmTap,
             handleAudioError,

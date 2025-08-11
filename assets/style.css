@@ -300,25 +300,35 @@ h1 {
     white-space: nowrap;
 }
 
-.move-to-input-btn {
+.track-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.track-action-btn {
     background: none;
     border: none;
     cursor: pointer;
     padding: 0;
     margin: 0;
-    flex-shrink: 0;
     display: flex;
     align-items: center;
     color: #888;
     transition: color 0.2s ease;
 }
 
-.move-to-input-btn .material-icons {
+.track-action-btn .material-icons {
     font-size: 20px;
 }
 
 .move-to-input-btn:hover {
     color: #1db954;
+}
+
+.delete-btn:hover {
+    color: #ff4d4d;
 }
 
 .track-item:hover {

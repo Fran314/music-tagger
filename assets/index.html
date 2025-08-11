@@ -126,6 +126,7 @@
             </div>
 
             <div class="columns-container">
+                <div class="columns-container">
                 <div class="column">
                     <h2>Input</h2>
                     <ul id="input-list">
@@ -138,6 +139,15 @@
                             @click="selectTrack(file, 'input')"
                         >
                             <span class="track-item-path">{{ file.path }}</span>
+                            <div class="track-actions">
+                                <button
+                                    class="track-action-btn delete-btn"
+                                    title="Delete file"
+                                    @click.stop="deleteFile(file, 'input')"
+                                >
+                                    <span class="material-icons">delete</span>
+                                </button>
+                            </div>
                         </li>
                     </ul>
                 </div>
@@ -153,13 +163,22 @@
                             @click="selectTrack(file, 'output')"
                         >
                             <span class="track-item-path">{{ file.path }}</span>
-                            <button
-                                class="move-to-input-btn"
-                                title="Move back to input"
-                                @click.stop="moveToInput(file)"
-                            >
-                                <span class="material-icons">undo</span>
-                            </button>
+                            <div class="track-actions">
+                                <button
+                                    class="track-action-btn move-to-input-btn"
+                                    title="Move back to input"
+                                    @click.stop="moveToInput(file)"
+                                >
+                                    <span class="material-icons">undo</span>
+                                </button>
+                                <button
+                                    class="track-action-btn delete-btn"
+                                    title="Delete file"
+                                    @click.stop="deleteFile(file, 'output')"
+                                >
+                                    <span class="material-icons">delete</span>
+                                </button>
+                            </div>
                         </li>
                     </ul>
                 </div>
