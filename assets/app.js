@@ -12,7 +12,7 @@ const app = createApp({
         const isLoading = ref(false)
         const isSaving = ref(false)
         const trackErrors = ref([])
-        const playerContainerClass = ref('')
+        const topContainerClass = ref('')
 
         const tags = reactive({
             title: '',
@@ -322,9 +322,9 @@ const app = createApp({
         }
 
         const triggerNoTrackFeedback = () => {
-            playerContainerClass.value = 'no-track-feedback'
+            topContainerClass.value = 'no-track-feedback'
             setTimeout(() => {
-                playerContainerClass.value = ''
+                topContainerClass.value = ''
             }, 600) // Must match the animation duration in CSS
         }
 
@@ -428,7 +428,7 @@ const app = createApp({
             isSaving,
             tags,
             trackErrors,
-            playerContainerClass,
+            topContainerClass,
             audioPlayer,
             searchInput,
             isFormDisabled,

@@ -15,27 +15,88 @@
         <div id="app" class="container" v-cloak>
             <h1>Music Tagger</h1>
 
-            <div class="player-container" :class="playerContainerClass">
-                <audio
-                    id="audio-player"
-                    controls
-                    ref="audioPlayer"
-                    @error="handleAudioError"
-                >
-                    Your browser does not support the audio element.
-                </audio>
+            <div class="columns-container">
+                <div class="column">
+                    <h2>Input</h2>
+                    <ul class="input-list">
+                        <li
+                            v-for="file in filteredInputFiles"
+                            :key="file.path"
+                            class="track-item"
+                            :data-path="file.path"
+                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
+                            @click="selectTrack(file, 'input')"
+                        >
+                            <span class="track-item-path">{{ file.path }}</span>
+                            <div class="track-actions">
+                                <button
+                                    class="track-action-btn delete-btn"
+                                    title="Delete file"
+                                    @click.stop="deleteFile(file, 'input')"
+                                >
+                                    <span class="material-icons">delete</span>
+                                </button>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="column">
+                    <h2>Output</h2>
+                    <ul class="output-list">
+                        <li
+                            v-for="file in filteredOutputFiles"
+                            :key="file.path"
+                            class="track-item"
+                            :data-path="file.path"
+                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
+                            @click="selectTrack(file, 'output')"
+                        >
+                            <span class="track-item-path">{{ file.path }}</span>
+                            <div class="track-actions">
+                                <button
+                                    class="track-action-btn move-to-input-btn"
+                                    title="Move back to input"
+                                    @click.stop="moveToInput(file)"
+                                >
+                                    <span class="material-icons">undo</span>
+                                </button>
+                                <button
+                                    class="track-action-btn delete-btn"
+                                    title="Delete file"
+                                    @click.stop="deleteFile(file, 'output')"
+                                >
+                                    <span class="material-icons">delete</span>
+                                </button>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="top-container">
+                <div class="player-container">
+                    <div class="player-element" :class="topContainerClass">
+                        <audio
+                            class="player"
+                            controls
+                            ref="audioPlayer"
+                            @error="handleAudioError"
+                        >
+                            Your browser does not support the audio element.
+                        </audio>
 
-                <input
-                    type="search"
-                    id="search-input"
-                    placeholder="Search tracks..."
-                    v-model="searchTerm"
-                    ref="searchInput"
-                />
+                        <div class="now-playing">{{ nowPlayingText }}</div>
+                    </div>
 
-                <div id="now-playing">{{ nowPlayingText }}</div>
+                    <input
+                        type="search"
+                        class="search-input"
+                        placeholder="Search tracks..."
+                        v-model="searchTerm"
+                        ref="searchInput"
+                    />
+                </div>
 
-                <form id="tag-form" @submit.prevent="saveTags">
+                <form class="tag-form" @submit.prevent="saveTags">
                     <div class="tag-input-group">
                         <label for="tag-input-title">Title</label>
                         <input
@@ -85,7 +146,7 @@
                     </div>
                     <div class="tag-input-group">
                         <label for="tag-input-bpm">BPM</label>
-                        <div id="bpm-tap-container">
+                        <div class="bpm-tap-container">
                             <input
                                 type="text"
                                 id="tag-input-bpm"
@@ -96,7 +157,7 @@
                             />
                             <button
                                 type="button"
-                                id="bpm-tap-button"
+                                class="bpm-tap-button"
                                 :disabled="isFormDisabled"
                                 @click="handleBpmTap"
                             >
@@ -117,71 +178,12 @@
                     </div>
                     <button
                         type="submit"
-                        id="save-button"
+                        class="save-button"
                         :disabled="isSaveDisabled"
                     >
                         {{ isSaving ? 'Saving...' : 'Save' }}
                     </button>
                 </form>
-            </div>
-
-            <div class="columns-container">
-                <div class="columns-container">
-                <div class="column">
-                    <h2>Input</h2>
-                    <ul id="input-list">
-                        <li
-                            v-for="file in filteredInputFiles"
-                            :key="file.path"
-                            class="track-item"
-                            :data-path="file.path"
-                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
-                            @click="selectTrack(file, 'input')"
-                        >
-                            <span class="track-item-path">{{ file.path }}</span>
-                            <div class="track-actions">
-                                <button
-                                    class="track-action-btn delete-btn"
-                                    title="Delete file"
-                                    @click.stop="deleteFile(file, 'input')"
-                                >
-                                    <span class="material-icons">delete</span>
-                                </button>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-                <div class="column">
-                    <h2>Output</h2>
-                    <ul id="output-list">
-                        <li
-                            v-for="file in filteredOutputFiles"
-                            :key="file.path"
-                            class="track-item"
-                            :data-path="file.path"
-                            :class="{ playing: currentTrack?.path === file.path, error: trackErrors.includes(file.path) }"
-                            @click="selectTrack(file, 'output')"
-                        >
-                            <span class="track-item-path">{{ file.path }}</span>
-                            <div class="track-actions">
-                                <button
-                                    class="track-action-btn move-to-input-btn"
-                                    title="Move back to input"
-                                    @click.stop="moveToInput(file)"
-                                >
-                                    <span class="material-icons">undo</span>
-                                </button>
-                                <button
-                                    class="track-action-btn delete-btn"
-                                    title="Delete file"
-                                    @click.stop="deleteFile(file, 'output')"
-                                >
-                                    <span class="material-icons">delete</span>
-                                </button>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </div>
 
