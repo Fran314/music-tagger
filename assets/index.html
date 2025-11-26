@@ -166,14 +166,29 @@
                         </div>
                     </div>
                     <div class="tag-input-group">
-                        <label for="tag-input-comment">Comment</label>
+                        <label for="tag-input-structure">Structure</label>
+                        <select
+                            id="tag-input-structure"
+                            class="tag-input"
+                            :disabled="isFormDisabled"
+                            v-model="tags.structure"
+                        >
+                            <option value="">-</option>
+                            <option value="4">4</option>
+                            <option value="4*">4*</option>
+                            <option value="6">6</option>
+                            <option value="6*">6*</option>
+                        </select>
+                    </div>
+                    <div class="tag-input-group">
+                        <label for="tag-input-quadre">Quadre</label>
                         <input
                             type="text"
-                            id="tag-input-comment"
+                            id="tag-input-quadre"
                             class="tag-input"
                             :placeholder="formPlaceholder"
                             :disabled="isFormDisabled"
-                            v-model="tags.comment"
+                            v-model="tags.quadre"
                         />
                     </div>
                     <button

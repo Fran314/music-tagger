@@ -274,11 +274,11 @@ h1 {
 
 .columns-container {
     width: 100%;
-    /* display: flex; */
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
     overflow: hidden;
+    flex: 1;
 }
 
 .column {

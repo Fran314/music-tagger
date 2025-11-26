@@ -18,7 +18,9 @@ const app = createApp({
             title: '',
             artist: '',
             bpm: '',
-            comment: '',
+            // comment: '',
+            structure: '',
+            quadre: '',
             genres: [],
         })
 
@@ -77,7 +79,9 @@ const app = createApp({
             tags.title = ''
             tags.artist = ''
             tags.bpm = ''
-            tags.comment = ''
+            // tags.comment = ''
+            tags.structure = ''
+            tags.quadre = ''
             tags.genres = []
             tapTimestamps.value = []
         }
@@ -96,13 +100,11 @@ const app = createApp({
                 tags.title = loadedTags.title || ''
                 tags.artist = loadedTags.artist || ''
                 tags.bpm = loadedTags.bpm || ''
-                tags.comment = loadedTags.comment || ''
+                // tags.comment = loadedTags.comment || ''
+                // TODO maybe force to cast to one of the possible structures
+                tags.structure = loadedTags.structure || ''
+                tags.quadre = loadedTags.quadre || ''
                 tags.genres = loadedTags.genre
-                    ? loadedTags.genre
-                          .toLowerCase()
-                          .split(',')
-                          .map(g => g.trim())
-                    : []
             } catch (error) {
                 console.error('Error fetching tags:', error)
                 nowPlayingText.value = `Error loading tags for ${currentTrack.value.path}`
@@ -139,8 +141,10 @@ const app = createApp({
                     title: tags.title,
                     artist: tags.artist,
                     bpm: tags.bpm,
-                    comment: tags.comment,
-                    genre: tags.genres.join(', '),
+                    // comment: tags.comment,
+                    structure: tags.structure,
+                    quadre: tags.quadre,
+                    genre: tags.genres,
                 },
             }
 

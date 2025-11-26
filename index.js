@@ -16,19 +16,13 @@ const OUTPUT_DIR_PATH = process.env.OUTPUT_DIR || './output'
 const INPUT_DIR = path.resolve(__dirname, INPUT_DIR_PATH)
 const OUTPUT_DIR = path.resolve(__dirname, OUTPUT_DIR_PATH)
 
-const ALLOWED_GENRES = new Set(['boogie woogie', 'lindy hop'])
+const ALLOWED_GENRES = ['boogie woogie', 'lindy hop']
 
 const app = express()
 
-// Middleware to parse JSON bodies from POST requests
 app.use(express.json())
-// Serve static files from the 'assets' directory
 app.use(express.static(path.join(__dirname, 'assets')))
 
-/**
- * Recursively finds all music files in a directory.
- * This uses synchronous methods from 'fs' for simplicity on startup.
- */
 function findMusicFiles(baseDir, currentDir = '') {
     const fullCurrentDir = path.join(baseDir, currentDir)
     let files = []
@@ -88,49 +82,62 @@ function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
 }
 
-async function getFileMetadata(filePathParam, baseDir) {
-    const fullFilePath = path.join(baseDir, filePathParam)
-    if (!fullFilePath.startsWith(baseDir)) {
-        return null // Security check
-    }
+const formatGenres = genres => {
+    if (!genres) return []
 
+    const filtered = genres
+        .flatMap(g => g.split(',').map(subG => subG.trim().toLowerCase()))
+        .filter(g => ALLOWED_GENRES.includes(g))
+
+    const unique = [...new Set(filtered)].sort()
+    return unique
+}
+const readTags = async source => {
     try {
-        const metadata = await mm.parseFile(fullFilePath)
-        const { common } = metadata
-
-        let finalGenres = []
-        if (common.genre) {
-            // 1. Flatten the array, handling cases where an element is a comma-separated string.
-            //    e.g., ["boogie woogie, lindy hop"] -> ["boogie woogie", "lindy hop"]
-            const potentialGenres = common.genre.flatMap(g =>
-                g.split(',').map(subG => subG.trim()),
-            )
-
-            // 2. Use a Set to store the unique, valid genres found (in their canonical lowercase form).
-            const foundAllowedGenres = new Set()
-            for (const pGenre of potentialGenres) {
-                const pGenreLower = pGenre.toLowerCase()
-                if (ALLOWED_GENRES.has(pGenreLower)) {
-                    foundAllowedGenres.add(pGenreLower)
-                }
-            }
-            finalGenres = [...foundAllowedGenres]
-        }
-
+        const tags = (await mm.parseFile(source)).common
+        const comment = tags.comment?.[0] || ''
+        const structure = comment.split('|')[0] || ''
+        const quadre = comment.split('|')[1] || ''
         return {
-            title: common.title || '',
-            artist: common.artist || '',
-            // Join the *filtered* list to be sent to the frontend.
-            genre: finalGenres.join(', '),
-            bpm: common.bpm || '',
-            comment:
-                common.comment && common.comment.length > 0
-                    ? common.comment[0]
-                    : '',
+            title: tags.title || '',
+            artist: tags.artist || '',
+            genre: formatGenres(tags.genre),
+            bpm: tags.bpm || '',
+            structure,
+            quadre,
+            // comment: tags.comment?.[0] || '',
         }
     } catch (error) {
-        console.error(`Error parsing metadata for ${fullFilePath}:`, error)
-        return null
+        return {
+            title: '',
+            artist: '',
+            genre: [],
+            bpm: '',
+            structure: '',
+            quadre: '',
+        }
+    }
+}
+const writeTags = async (tags, dest) => {
+    try {
+        const fileBuffer = await fs.readFile(dest)
+        const success = NodeID3.write(
+            {
+                ...tags,
+                genre: tags.genre.join(', '),
+                comment: {
+                    language: 'eng',
+                    text: `${tags.structure}|${tags.quadre}`,
+                },
+            },
+            fileBuffer,
+        )
+        if (success === false) {
+            throw new Error('Failed to write ID3 tags to buffer.')
+        }
+        await fs.writeFile(dest, success)
+    } catch (error) {
+        console.error('Error saving file:', error)
     }
 }
 
@@ -139,10 +146,11 @@ app.get('/api/tags/:dir/*filePath', async (req, res) => {
     const dir = req.params.dir
     const baseDir = dir === 'input' ? INPUT_DIR : OUTPUT_DIR
 
-    const tags = await getFileMetadata(filePathParam, baseDir)
-    if (!tags) {
-        return res.status(500).json({ error: 'Failed to read metadata.' })
+    const fullFilePath = path.join(baseDir, filePathParam)
+    if (!fullFilePath.startsWith(baseDir)) {
+        return res.sendStatus(403)
     }
+    const tags = await readTags(fullFilePath)
     res.json(tags)
 })
 
@@ -166,19 +174,19 @@ app.post('/api/save', async (req, res) => {
     const destFullPath = path.join(OUTPUT_DIR, newFilename)
 
     try {
-        const fileBuffer = await fs.readFile(sourceFullPath)
-        const newTagsForWrite = {
+        if (sourceFullPath !== destFullPath) {
+            await fs.cp(sourceFullPath, destFullPath)
+        }
+        const newTags = {
             title: tags.title,
             artist: tags.artist,
             genre: tags.genre,
             bpm: tags.bpm,
-            comment: { language: 'eng', text: tags.comment },
+            structure: tags.structure,
+            quadre: tags.quadre,
         }
-        const success = NodeID3.write(newTagsForWrite, fileBuffer)
-        if (success === false) {
-            throw new Error('Failed to write ID3 tags to buffer.')
-        }
-        await fs.writeFile(destFullPath, success)
+        await writeTags(newTags, destFullPath)
+
         if (sourceFullPath !== destFullPath) {
             await fs.unlink(sourceFullPath)
         }
@@ -309,7 +317,6 @@ app.get('/api/play/:dir/*filePath', (req, res) => {
 })
 
 // Fallback to serve index.html for any other GET request.
-// This is essential for a single-page application where routing is handled client-side.
 app.get('/{*filePath}', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets', 'index.html'))
 })
